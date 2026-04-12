@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenant Deposit Refund Manager</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f8; color: #1a1a2e; }
+  header { background: #1a1a2e; color: #fff; padding: 18px 24px; font-size: 1.4rem; font-weight: 700; }
+  nav { background: #fff; border-bottom: 1px solid #ddd; padding: 8px 24px; display: flex; gap: 8px; }
+  nav button { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: .95rem; background: #e8e8e8; }
+  nav button.active { background: #1a1a2e; color: #fff; }
+  .container { max-width: 900px; margin: 30px auto; padding: 0 16px; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 28px; margin-bottom: 20px; }
+  .card h2 { margin-bottom: 18px; font-size: 1.25rem; }
+  label { display: block; font-weight: 600; margin: 10px 0 4px; font-size: .9rem; }
+  input[type="text"], input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: .95rem; }
+  .switch-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+  .switch-row input { width: auto; }
+  .btn { display: inline-block; padding: 10px 24px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; margin-top: 12px; }
+  .btn:hover { background: #16213e; }
+  .info { text-align: center; color: #888; padding: 30px 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th { background: #f0f0f0; text-align: left; padding: 10px; font-size: .85rem; color: #555; }
+  td { padding: 10px; border-bottom: 1px solid #eee; font-size: .9rem; }
+  .result-card { background: #f4f6f8; border-radius: 8px; padding: 16px; margin-top: 12px; }
+  .result-card p { margin: 4px 0; font-size: .9rem; }
+  .refund-amount { font-size: 1.15rem; font-weight: 700; margin-top: 6px; }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input { flex: 1; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header>🏠 Tenant Deposit Refund Manager</header>
+
+<nav>
+  <button class="active" onclick="showTab('add')">➕ Add Tenant</button>
+  <button onclick="showTab('display')">👥 All Tenants</button>
+  <button onclick="showTab('search')">🔍 Search</button>
+</nav>
+
+<div class="container">
+  <!-- Add Tenant -->
+  <div id="tab-add" class="card">
+    <h2>Add New Tenant</h2>
+    <label>Tenant Name</label>
+    <input type="text" id="name" placeholder="John Doe">
+    <label>Apartment Number</label>
+    <input type="number" id="apt" placeholder="101">
+    <label>Months Stayed</label>
+    <input type="number" id="months" placeholder="6">
+    <label>Deposit Amount ($)</label>
+    <input type="number" id="deposit" placeholder="500.00">
+    <div class="switch-row">
+      <input type="checkbox" id="damageCheck" onchange="toggleDamage()">
+      <label for="damageCheck" style="margin:0">Damage Reported?</label>
+    </div>
+    <div id="damageField" class="hidden">
+      <label>Damage Cost ($)</label>
+      <input type="number" id="damageCost" placeholder="150.00">
+    </div>
+    <p style="font-size:.85rem;color:#888;margin-top:10px">* Refund eligibility requires minimum 3 months stay. Refund = Deposit − Damage Cost.</p>
+    <button class="btn" onclick="addTenant()">➕ Add Tenant</button>
+  </div>
+
+  <!-- Display All -->
+  <div id="tab-display" class="card hidden">
+    <h2>All Tenants (<span id="count">0</span>)</h2>
+    <div id="tenantTable"></div>
+  </div>
+
+  <!-- Search -->
+  <div id="tab-search" class="card hidden">
+    <h2>Search Tenant</h2>
+    <div class="search-row">
+      <input type="text" id="searchName" placeholder="Enter tenant name..." onkeydown="if(event.key==='Enter')searchTenant()">
+      <button class="btn" style="margin-top:0" onclick="searchTenant()">🔍</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+<script>
+  let tenants = [];
+
+  function calculateRefund(t) {
+    if (t.isEligibleForRefund) {
+      let r = t.deposit - t.damageCost;
+      return r > 0 ? r : 0;
+    }
+    return 0;
+  }
+
+  function toggleDamage() {
+    document.getElementById('damageField').classList.toggle('hidden', !document.getElementById('damageCheck').checked);
+  }
+
+  function showTab(tab) {
+    document.querySelectorAll('.container > .card').forEach(c => c.classList.add('hidden'));
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    if (tab === 'display') renderTable();
+  }
+
+  function addTenant() {
+    let name = document.getElementById('name').value.trim();
+    let apt = document.getElementById('apt').value;
+    let months = parseInt(document.getElementById('months').value);
+    let deposit = parseFloat(document.getElementById('deposit').value);
+    let hasDamage = document.getElementById('damageCheck').checked;
+    let dmgCost = hasDamage ? (parseFloat(document.getElementById('damageCost').value) || 0) : 0;
+
+    if (!name || !apt || isNaN(months) || isNaN(deposit)) {
+      alert('Please fill in all required fields.'); return;
+    }
+
+    tenants.push({
+      name,
+      apartmentNumber: parseInt(apt),
+      monthsStayed: months,
+      deposit,
+      damageReported: hasDamage,
+      damageCost: dmgCost,
+      isEligibleForRefund: months >= 3
+    });
+
+    document.getElementById('name').value = '';
+    document.getElementById('apt').value = '';
+    document.getElementById('months').value = '';
+    document.getElementById('deposit').value = '';
+    document.getElementById('damageCheck').checked = false;
+    document.getElementById('damageCost').value = '';
+    toggleDamage();
+    alert('Tenant "' + name + '" added successfully!');
+  }
+
+  function renderTable() {
+    document.getElementById('count').textContent = tenants.length;
+    if (tenants.length === 0) {
+      document.getElementById('tenantTable').innerHTML = '<p class="info">No records found. Add a tenant to get started.</p>';
+      return;
+    }
+    let html = '<table><tr><th>#</th><th>Name</th><th>Apt</th><th>Months</th><th>Deposit</th><th>Damage</th><th>Eligible</th><th>Refund</th></tr>';
+    tenants.forEach((t, i) => {
+      html += '<tr><td>' + (i+1) + '</td><td><strong>' + t.name + '</strong></td><td>' + t.apartmentNumber + '</td><td>' + t.monthsStayed + '</td><td>$' + t.deposit.toFixed(2) + '</td><td>$' + t.damageCost.toFixed(2) + '</td><td>' + (t.isEligibleForRefund ? '✅ Yes' : '❌ No') + '</td><td><strong>$' + calculateRefund(t).toFixed(2) + '</strong></td></tr>';
+    });
+    html += '</table>';
+    document.getElementById('tenantTable').innerHTML = html;
+  }
+
+  function searchTenant() {
+    let sName = document.getElementById('searchName').value.trim().toLowerCase();
+    let results = tenants.filter(t => t.name.toLowerCase() === sName);
+    let el = document.getElementById('searchResults');
+    if (results.length === 0) {
+      el.innerHTML = '<p class="info">No tenant found with that name.</p>';
+      return;
+    }
+    el.innerHTML = results.map(t =>
+      '<div class="result-card">' +
+      '<p><strong>Name:</strong> ' + t.name + '</p>' +
+      '<p><strong>Apartment:</strong> ' + t.apartmentNumber + '</p>' +
+      '<p><strong>Months Stayed:</strong> ' + t.monthsStayed + '</p>' +
+      '<p><strong>Deposit:</strong> $' + t.deposit.toFixed(2) + '</p>' +
+      '<p><strong>Damage Cost:</strong> $' + t.damageCost.toFixed(2) + '</p>' +
+      '<p><strong>Eligible:</strong> ' + (t.isEligibleForRefund ? 'Yes' : 'No') + '</p>' +
+      '<p class="refund-amount">Refund Due: $' + calculateRefund(t).toFixed(2) + '</p>' +
+      '</div>'
+    ).join('');
+  }
+</script>
+
+</body>
+</html>
